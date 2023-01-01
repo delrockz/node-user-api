@@ -1,0 +1,137 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Node User API Serverless backend lambda.
+
+Parameters:
+  RDSAuroraPosgresDBName:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: Postgres database name
+    Default: rds-aurora-postgres-db-name
+  RDSAuroraPosgresDBArn:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: Postgres database ARN
+    Default: rds-aurora-postgres-db-arn
+  RDSAuroraPosgresDBSecretARN:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: Postgres database secret ARN
+    Default: rds-aurora-postgres-db-secret-arn
+  AWSUserPoolID:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: AWS User Pool ID
+    Default: user-pool-id
+  AWSUserPoolAppClientID:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: AWS User Pool Client ID
+    Default: user-pool-app-client-id
+  AWSAccessKeyID:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: AWS Access Key ID
+    Default: access-key-id
+  AWSSecretAccessKey:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: AWS Secret Access Key
+    Default: secret-access-key
+
+Resources:
+  NodeUserAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: node-user-api
+      StageName: dev
+      DefinitionBody:
+        openapi: 3.0.0
+        info:
+          description: API for working with Node User API serverless express lambda
+          title: Node User API
+          version: '1.0'
+        paths:
+          /{proxy+}:
+            options:
+              summary: CORS support
+              description: Enable CORS by returning correct headers. Authentication
+                not required.
+              parameters:
+                - name: proxy
+                  in: Path
+                  required: true
+                  schema:
+                    type: string
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: '200'
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:node-user-api/invocations
+                passthroughBehavior: when_no_match
+                httpMethod: POST
+                type: aws_proxy
+            x-amazon-apigateway-any-method:
+              parameters:
+                - name: proxy
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+              responses: {}
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: '200'
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:node-user-api/invocations
+                passthroughBehavior: when_no_match
+                httpMethod: POST
+                cacheNamespace: node-user-api
+                cacheKeyParameters:
+                  - method.request.path.proxy
+                type: aws_proxy
+  NodeUserAPIRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: 'node-user-api-role'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+  NodeUserAPILambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: 'node-user-api'
+      CodeUri: build
+      Handler: index.handler
+      Runtime: nodejs14.x
+      Timeout: 60
+      MemorySize: 1024
+      Role: !GetAtt NodeUserAPIRole.Arn
+      Environment:
+        Variables:
+          RDS_AURORA_POSTGRES_DB_NAME: !Ref RDSAuroraPosgresDBName
+          RDS_AURORA_POSTGRES_DB_ARN: !Ref RDSAuroraPosgresDBArn
+          RDS_AURORA_POSTGRES_DB_SECRET_ARN: !Ref RDSAuroraPosgresDBSecretARN
+          AWS_USER_POOL_ID: !Ref AWSUserPoolID
+          AWS_USER_POOL_APP_CLIENT_ID: !Ref AWSUserPoolAppClientID
+          AWSAccessKeyID: !Ref AWSAccessKeyID
+          AWSSecretAccessKey: !Ref AWSSecretAccessKey
+      Events:
+        Proxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref NodeUserAPI
+            Path: /{proxy+}
+            Method: any
+Outputs:
+  NodeUserAPIAPIEndpoint:
+    Description: 'Node User API endpoint'
+    Value: !Sub 'https://${NodeUserAPI}.execute-api.${AWS::Region}.amazonaws.com'
+    Export:
+      Name: 'node-user-api-endpoint'

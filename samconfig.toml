@@ -1,0 +1,13 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "node-user-api"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-dgiqflj4wi2h"
+s3_prefix = "node-user-api"
+region = "ap-south-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_NAMED_IAM" 
+disable_rollback = true
+parameter_overrides = "RDSAuroraPosgresDBName=\"rds-aurora-postgres-db-name\" RDSAuroraPosgresDBArn=\"rds-aurora-postgres-db-arn\" RDSAuroraPosgresDBSecretARN=\"rds-aurora-postgres-db-secret-arn\" AWSUserPoolID=\"user-pool-id\" AWSUserPoolAppClientID=\"user-pool-app-client-id\" AWSAccessKeyID=\"access-key-id\" AWSSecretAccessKey=\"secret-access-key\""
+image_repositories = []

@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  Deploys AWS resources for the initial infrastructure setup for Node User API.
+
+Parameters:
+  PostgresDBUsername:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: PostgresDBUsername
+    Description: Master username for postgres DB
+
+Resources:
+  PostgresServerlessDBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Postgres serverless database credentials
+      GenerateSecretString:
+        SecretStringTemplate: !Join ['', ['{"username": "', !Ref PostgresDBUsername, '"}']]
+        GenerateStringKey: 'password'
+        PasswordLength: 12
+        ExcludeCharacters: '"@/\'
+  PostgresServerlessDB:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      AvailabilityZones:
+        - ap-south-1a
+        - ap-south-1b
+      DatabaseName: 'postgresdb'
+      DBClusterIdentifier: 'postgres-serverless-db'
+      Engine: aurora-postgresql
+      EngineMode: serverless
+      MasterUsername: !Ref PostgresDBUsername
+      MasterUserPassword:
+        !Join ['', ['{{resolve:secretsmanager:', !Ref PostgresServerlessDBSecret, ':SecretString:password}}']]
+      ScalingConfiguration:
+        AutoPause: false
+        MaxCapacity: 32
+        MinCapacity: 2
+      EnableHttpEndpoint: true
+  CognitoUserAuthPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: 'node-task-users'
+      UsernameAttributes:
+        - phone_number
+        - email
+      Schema:
+        - AttributeDataType: String
+          Mutable: false
+          Required: true
+          Name: phone_number
+        - AttributeDataType: String
+          Mutable: false
+          Required: true
+          Name: email
+        - AttributeDataType: String
+          Mutable: true
+          Name: first_name
+        - AttributeDataType: String
+          Mutable: true
+          Name: last_name
+        - AttributeDataType: String
+          Mutable: true
+          Name: otp
+  CognitoUserAuthPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Select [1, !Split ['/', !GetAtt CognitoUserAuthPool.Arn]]
+      ClientName: node-app
+      AccessTokenValidity: 10
+      AuthSessionValidity: 10
+      IdTokenValidity: 10
+      CallbackURLs:
+        - 'http://localhost:5000'
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - phone
+        - email
+
+Outputs:
+  PostgresDBEndpoint:
+    Description: Connection endpoint for the postgres serverless DB cluster
+    Value: !GetAtt PostgresServerlessDB.Endpoint.Address
+    Export:
+      Name: postgres-serverless-db-endpoint
+  PostgresDBName:
+    Description: Postgres serverless database name.
+    Value: postgresdb
+    Export:
+      Name: postgres-serverless-db-name
+  PostgresDBArn:
+    Description: Arn of the postgres serverless database.
+    Value: !Sub 'arn:${AWS::Partition}:rds:${AWS::Region}:${AWS::AccountId}:cluster:${PostgresServerlessDB}'
+    Export:
+      Name: postgres-serverless-db-arn
+  PostgresDBSecretsArn:
+    Description: Arn of the secrets manager credentials used to access the postgres serverless database.
+    Value: !Ref PostgresServerlessDBSecret
+    Export:
+      Name: postgres-serverless-db-secrets-arn
+  CognitoUserAuthPoolId:
+    Description: User Pool ID.
+    Value: !Select [1, !Split ['/', !GetAtt CognitoUserAuthPool.Arn]]
+    Export:
+      Name: cognito-user-auth-pool-id
+  CognitoUserAuthPoolClientId:
+    Description: User Pool Client ID.
+    Value: !Ref CognitoUserAuthPoolClient
+    Export:
+      Name: cognito-user-auth-pool-client-id
