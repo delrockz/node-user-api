@@ -17,6 +17,6 @@ router.put('/verify-otp', confirmUserWithOTP)
 router.post('/login', loginUser)
 router.get('/user', authenticate, getUserProfile)
 router.put('/user', authenticate, updateUserProfile)
-router.delete('/user/:email', deleteUser)
+router.delete('/user/:phone', deleteUser)
 
 export default router

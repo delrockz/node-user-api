@@ -1,3 +1,5 @@
+import { SendEmailResponse } from 'aws-sdk/clients/ses'
+import { PublishResponse } from 'aws-sdk/clients/sns'
 import { AWS_CONFIG } from '../utils/aws-config'
 const AWS = require('aws-sdk')
 
@@ -42,7 +44,7 @@ export const sendEmail = ({
 
   let sendPromise = new AWS.SES({ apiVersion: '2010-12-01' }).sendEmail(emailParams).promise()
   sendPromise
-    .then(function (data: any) {
+    .then(function (data: SendEmailResponse) {
       console.log('AWS SES MessageID is ' + data.MessageId)
     })
     .catch(function (err: any) {
@@ -58,7 +60,7 @@ export const sendSMS = ({ message, phone }: { message: string; phone: string }) 
 
   let publishTextPromise = new AWS.SNS({ apiVersion: '2010-03-31' }).publish(smsParams).promise()
   publishTextPromise
-    .then(function (data: any) {
+    .then(function (data: PublishResponse) {
       console.log('AWS SNS MessageID is ' + data.MessageId)
     })
     .catch(function (err: any) {

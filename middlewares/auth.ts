@@ -1,3 +1,4 @@
+import { AttributeType } from 'aws-sdk/clients/cognitoidentityserviceprovider'
 import { Response } from 'express'
 import { IRequestWithUser } from '../interfaces/IRequestWithUser'
 import User from '../models/User'
@@ -23,7 +24,7 @@ export const authenticate = async (req: IRequestWithUser, res: Response, next: (
     )
 
     let user = await User.query().findOne({
-      email: data.UserAttributes.filter((data: any) => data.Name === 'email')[0].Value
+      email: data.UserAttributes.filter((data: AttributeType) => data.Name === 'email')[0].Value
     })
     if (user) req.user = user
     next()

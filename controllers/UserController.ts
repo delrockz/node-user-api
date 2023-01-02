@@ -1,11 +1,23 @@
 import { Request, Response } from 'express'
-import { CognitoUserPool, CognitoUser, CognitoUserAttribute, AuthenticationDetails } from 'amazon-cognito-identity-js'
+import {
+  CognitoUserPool,
+  CognitoUser,
+  CognitoUserAttribute,
+  AuthenticationDetails,
+  CognitoUserSession
+} from 'amazon-cognito-identity-js'
 import { generateOTP } from '../utils'
 import User from '../models/User'
 import { sendEmail, sendSMS } from '../services'
 import { AWS_CONFIG, USER_POOL_ID } from '../utils/aws-config'
 import { IRequestWithUser } from '../interfaces/IRequestWithUser'
-const AWS = require('aws-sdk')
+import {
+  AdminConfirmSignUpResponse,
+  AdminGetUserResponse,
+  AdminUpdateUserAttributesResponse,
+  AttributeType
+} from 'aws-sdk/clients/cognitoidentityserviceprovider'
+import AWS from 'aws-sdk'
 
 AWS.config.update(AWS_CONFIG)
 var cognitoAdminClient = new AWS.CognitoIdentityServiceProvider({
@@ -32,10 +44,10 @@ export const signupUser = async (req: Request, res: Response, next: () => void) 
 
   let otp = generateOTP()
   userPool.signUp(
-    email,
+    phone,
     password,
     [
-      new CognitoUserAttribute({ Name: 'phone_number', Value: phone }),
+      new CognitoUserAttribute({ Name: 'email', Value: email }),
       new CognitoUserAttribute({ Name: 'custom:first_name', Value: first_name }),
       new CognitoUserAttribute({ Name: 'custom:last_name', Value: last_name }),
       new CognitoUserAttribute({ Name: 'custom:otp', Value: otp }) // To verify the OTP later
@@ -73,20 +85,20 @@ export const signupUser = async (req: Request, res: Response, next: () => void) 
 }
 
 export const confirmUserWithOTP = async (req: Request, res: Response, next: () => void) => {
-  const { code, email, phone }: { code: string; email: string; phone: string } = req.body
-  if (!code) return res.status(400).json({ error: `Verification code is missing.` })
-  if (!email && !phone) return res.status(400).json({ error: `Email or phone is required.` })
-  let Username = phone ?? email ?? ''
-  cognitoAdminClient.adminGetUser({ Username, UserPoolId: USER_POOL_ID ?? '' }, (err: any, result: any) => {
+  const { code, phone }: { code: string; phone: string } = req.body
+  if (!code) return res.status(400).json({ error: `'code' is required.` })
+  if (!phone) return res.status(400).json({ error: `'phone' is required.` })
+  let Username = phone
+  cognitoAdminClient.adminGetUser({ Username, UserPoolId: USER_POOL_ID }, (err: any, result: AdminGetUserResponse) => {
     if (err) return res.status(500).json({ error: err.message || JSON.stringify(err) })
-    let validOTP = result.UserAttributes?.find((obj: any) => obj.Name === 'custom:otp')?.Value
+    let validOTP = result.UserAttributes?.find((obj: AttributeType) => obj.Name === 'custom:otp')?.Value
     if (code !== validOTP) return res.status(403).json({ error: 'Invalid OTP.' })
     cognitoAdminClient.adminConfirmSignUp(
       {
         Username,
         UserPoolId: USER_POOL_ID
       },
-      (err: any, result: any) => {
+      (err: any, result: AdminConfirmSignUpResponse) => {
         if (err) return res.status(500).json({ error: err.message || JSON.stringify(err) })
         cognitoAdminClient.adminUpdateUserAttributes(
           {
@@ -103,7 +115,7 @@ export const confirmUserWithOTP = async (req: Request, res: Response, next: () =
             UserPoolId: USER_POOL_ID,
             Username
           },
-          (err: any, result: any) => {
+          (err: any, result: AdminUpdateUserAttributesResponse) => {
             if (err) return res.status(500).json({ error: err.message || JSON.stringify(err) })
             return res.status(200).json({ message: 'Successfully confirmed user' })
           }
@@ -115,11 +127,11 @@ export const confirmUserWithOTP = async (req: Request, res: Response, next: () =
 
 export const loginUser = async (req: Request, res: Response, next: () => void) => {
   try {
-    const { email, phone, password }: { email?: string; phone?: string; password: string } = req.body
-    if (!email && !phone) return res.status(400).json({ error: "'email' or 'phone' required." })
+    const { phone, password }: { phone: string; password: string } = req.body
+    if (!phone) return res.status(400).json({ error: "'phone' required." })
     if (!password) return res.status(400).json({ error: "'password' required." })
 
-    let Username = phone ?? email ?? ''
+    let Username = phone
     var cognitoUser = new CognitoUser({
       Username,
       Pool: userPool
@@ -130,7 +142,7 @@ export const loginUser = async (req: Request, res: Response, next: () => void) =
         Password: password
       }),
       {
-        onSuccess(session) {
+        onSuccess(session: CognitoUserSession) {
           return res.status(200).json({
             data: {
               accessToken: session.getAccessToken().getJwtToken(),
@@ -176,10 +188,19 @@ export const updateUserProfile = async (req: IRequestWithUser, res: Response, ne
 
 export const deleteUser = async (req: Request, res: Response, next: () => void) => {
   try {
-    let email = req.params.email
-    if (!email) return res.status(400).json({ error: 'Missing required field email.' })
-    await User.query().delete().where({ email })
-    return res.status(200).json({ data: 'Deleted user account successfully.' })
+    let phone = req.params.phone
+    if (!phone) return res.status(400).json({ error: "Missing required field 'phone'." })
+    cognitoAdminClient.adminDeleteUser(
+      {
+        Username: phone,
+        UserPoolId: USER_POOL_ID
+      },
+      async (err: any) => {
+        if (err) return res.status(403).json({ error: err.message || JSON.stringify(err) })
+        await User.query().delete().where({ phone })
+        return res.status(200).json({ data: 'Deleted user account successfully.' })
+      }
+    )
   } catch (err: any) {
     return res.status(500).json({ error: err.message })
   }
