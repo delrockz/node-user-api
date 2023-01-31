@@ -32,9 +32,10 @@ Resources:
       MasterUserPassword:
         !Join ['', ['{{resolve:secretsmanager:', !Ref PostgresServerlessDBSecret, ':SecretString:password}}']]
       ScalingConfiguration:
-        AutoPause: false
-        MaxCapacity: 32
+        AutoPause: true
+        MaxCapacity: 16
         MinCapacity: 2
+        SecondsUntilAutoPause: 300
       EnableHttpEndpoint: true
   CognitoUserAuthPool:
     Type: AWS::Cognito::UserPool
